@@ -6,6 +6,7 @@ use DateTime;
 use Illuminate\Database\Connection;
 use Illuminate\Queue\DatabaseQueue;
 use Illuminate\Queue\Jobs\DatabaseJob;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 
 class AsyncQueue extends DatabaseQueue
@@ -154,7 +155,10 @@ class AsyncQueue extends DatabaseQueue
 
         $binary = $this->getPhpBinary();
 
-        return sprintf($cmd, $binary, $id, $connection);
+        $command = sprintf($cmd, $binary, $id, $connection);
+        Log::debug($command);
+
+        return $command;
     }
 
     /**
@@ -179,7 +183,7 @@ class AsyncQueue extends DatabaseQueue
     protected function getBackgroundCommand($cmd)
     {
         if (defined('PHP_WINDOWS_VERSION_BUILD')) {
-            return 'start /B '.$cmd.' > NUL';
+            return 'start "" /B '.$cmd.' > NUL';
         } else {
             return $cmd.' > /dev/null 2>&1 &';
         }
