@@ -150,7 +150,7 @@ class AsyncQueue extends DatabaseQueue
     protected function getCommand($id)
     {
         $connection = $this->connectionName;
-        $cmd = '"%s" artisan queue:async %d %s';
+        $cmd = '%s artisan queue:async %d %s';
         $cmd = $this->getBackgroundCommand($cmd);
 
         $binary = $this->getPhpBinary();
