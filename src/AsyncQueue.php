@@ -1,13 +1,12 @@
 <?php
 namespace Barryvdh\Queue;
 
-use Carbon\Carbon;
-use DateTime;
 use Illuminate\Database\Connection;
 use Illuminate\Queue\DatabaseQueue;
 use Illuminate\Queue\Jobs\DatabaseJob;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
+use Illuminate\Queue\Jobs\DatabaseJobRecord;
 
 class AsyncQueue extends DatabaseQueue
 {
@@ -22,9 +21,9 @@ class AsyncQueue extends DatabaseQueue
 
     /**
      * @param  \Illuminate\Database\Connection  $database
-	 * @param  string  $table
-	 * @param  string  $default
-	 * @param  int  $expire
+     * @param  string  $table
+     * @param  string  $default
+     * @param  int  $expire
      * @param  string  $binary
      * @param  string|array  $binaryArgs
      */
@@ -54,20 +53,20 @@ class AsyncQueue extends DatabaseQueue
     }
     
     /**
-	 * Push a raw payload onto the queue.
-	 *
-	 * @param  string  $payload
-	 * @param  string  $queue
-	 * @param  array   $options
-	 * @return mixed
-	 */
-	public function pushRaw($payload, $queue = null, array $options = array())
-	{
-		$id = parent::pushRaw($payload, $queue, $options);
+     * Push a raw payload onto the queue.
+     *
+     * @param  string  $payload
+     * @param  string  $queue
+     * @param  array   $options
+     * @return mixed
+     */
+    public function pushRaw($payload, $queue = null, array $options = array())
+    {
+        $id = parent::pushRaw($payload, $queue, $options);
         $this->startProcess($id);
 
         return $id;
-	}
+    }
     
     /**
      * Push a new job onto the queue after a delay.
@@ -87,46 +86,47 @@ class AsyncQueue extends DatabaseQueue
         return $id;
     }
     
-    protected function pushToDatabase($delay, $queue, $payload, $attempts = 0)
-	{
-		$availableAt = $delay instanceof DateTime ? $delay : Carbon::now()->addSeconds($delay);
+    /**
+     * Create an array to insert for the given job.
+     *
+     * @param  string|null  $queue
+     * @param  string  $payload
+     * @param  int  $availableAt
+     * @param  int  $attempts
+     * @return array
+     */
+    protected function buildDatabaseRecord($queue, $payload, $availableAt, $attempts = 0)
+    {
+        $record = parent::buildDatabaseRecord($queue, $payload, $availableAt, $attempts);
+        $record['reserved_at'] = $this->currentTime();
 
-		return $this->database->table($this->table)->insertGetId([
-			'queue' => $this->getQueue($queue),
-			'payload' => $payload,
-			'attempts' => $attempts,
-			'reserved' => 1,
-			'reserved_at' => $this->getTime(),
-			'available_at' => $availableAt->getTimestamp(),
-			'created_at' => $this->getTime(),
-		]);
-	}
+        return $record;
+    }
     
     /**
-	 * Get the next available job for the queue.
-	 *
-	 * @param  string|null  $queue
-	 * @return \StdClass|null
-	 */
-	public function getJobFromId($id)
-	{
-		$job = $this->database->table($this->table)
-					->where('id', $id)
-					->first();
+     * Get the next available job for the queue.
+     *
+     * @param  int $id
+     * @return DatabaseJob
+     */
+    public function getJobFromId($id)
+    {
+        $job = $this->database->table($this->table)
+                    ->where('id', $id)
+                    ->first();
                     
-        if($job) {
-            
-			return new DatabaseJob(
-				$this->container, $this, $job, $job->queue
-			);
+        if ($job) {
+            $job = $this->markJobAsReserved(new DatabaseJobRecord((object) $job));
+            return new DatabaseJob(
+                $this->container, $this, $job, $this->connectionName, $job->queue
+            );
         }
-	}
+    }
     
     /**
      * Make a Process for the Artisan command for the job id.
      *
-     * @param int $jobId
-     * @param int $delay
+     * @param int $id
      *
      * @return void
      */
@@ -142,8 +142,7 @@ class AsyncQueue extends DatabaseQueue
     /**
      * Get the Artisan command as a string for the job id.
      *
-     * @param int $jobId
-     * @param int $delay
+     * @param int $id
      *
      * @return string
      */
@@ -188,7 +187,4 @@ class AsyncQueue extends DatabaseQueue
             return $cmd.' > /dev/null 2>&1 &';
         }
     }
-
-    
-
 }
